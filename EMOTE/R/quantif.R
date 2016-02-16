@@ -7,7 +7,7 @@
 #' @export
 #' @import S4Vectors
 #' @import Biostrings
-EMOTE_parse_reads <- function(sr,valid.barcodes=DNAStringSet(c("TACA","GTAT","CGTC","AAGT","ACAC","GGTA","GCCT","TCGG","CAAG","TTGA","GCTG","CCGA","CTCG"))) {
+EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("TACA","GTAT","CGTC","AAGT","ACAC","GGTA","GCCT","TCGG","CAAG","TTGA","GCTG","CCGA","CTCG"))) {
   X <- DataFrame(first_nt = narrow(sread(sr),1,1),
        barcode = narrow(sread(sr),2,5),
        recognition = narrow(sread(sr),6,20),
@@ -16,7 +16,7 @@ EMOTE_parse_reads <- function(sr,valid.barcodes=DNAStringSet(c("TACA","GTAT","CG
        read = narrow(sr,31)
   )
   X <- within(X,{
-    is_valid_EMOTE_read <- recognition==DNAString("CGGCACCAACCGAGG")
+    is_valid_EMOTE_read <- vcountPattern("CGGCACCAACCGAGG",recognition,max.mismatch=max.mismatch)>0
     is_valid_EMOTE_read <- is_valid_EMOTE_read & (control==DNAString("CGC"))
     is_valid_EMOTE_read <- is_valid_EMOTE_read & as.vector(letterFrequency(umi,"ACG")==width(umi))
     is_valid_EMOTE_read <- is_valid_EMOTE_read & (is.null(.(valid.barcodes)) | (barcode %in% .(valid.barcodes)))
@@ -63,8 +63,8 @@ EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),for
     if (!is.null(invalid.reads)) writeFastq(fq[!X$is_valid_EMOTE_read],invalid.reads,mode="a")
     X <- subset(X,is_valid_EMOTE_read)
     X <- split(X$read,as.character(X$barcode))
-    fn <- file.path(out.dir,paste0(names(X),".fq"))
-    mapply(writeFastq, X, fn, MoreArgs = list(compress=FALSE,mode="a"))
+    fn <- file.path(out.dir,paste0(names(X),".fq.gz"))
+    mapply(writeFastq, X, fn, MoreArgs = list(compress=TRUE,mode="a"))
 
     demux.report <- within(demux.report,{
       summary$total.read.count <- summary$total.read.count + length(fq)
@@ -78,63 +78,112 @@ EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),for
 }
 
 
+gunzip <- function(gz.file,dest.file) {
+  gz.file <- gzfile(gz.file,"rb");on.exit(close(gz.file))
+  dest.file <- file(dest.file,"wb");on.exit(close(dest.file))
+  while (length(data <- readBin(gz.file,raw(),n=20e6)))
+    writeBin(data,dest.file)
+}
+
 #' Map reads to a genome with Rbowtie
 #' @export
 #' @import Rbowtie
 #' @import Rsamtools
-EMOTE_map <- function(bowtie_index,fq.files,bam.files=sub("(.fastq|.fq)$",".bam",fq.files)) {
+EMOTE_map <- function(bowtie_index,fq.files,bam.files=sub("(.fastq|.fq)(.gz)?$",".bam",fq.files),threads=3) {
   fq.files <- as.character(fq.files)
   if (!all(grepl("\\.bam$",bam.files))) stop("bam.files must end with .bam suffix")
 
   mapply(function(fq.file,bam.file) {
+    if (grepl(".gz$",fq.file)) {
+      gz.file <- fq.file
+      gunzip(gz.file,fq.file <- tempfile(fileext=".fq"))
+    }
     sam.file <- tempfile(fileext=".sam")
-    bowtie(sam=TRUE,best=TRUE,M=1,sequences=fq.file,index=bowtie_index,outfile=sam.file)
+    bowtie(sam=TRUE,best=TRUE,M=1,sequences=fq.file,index=bowtie_index,outfile=sam.file,threads=threads)
     asBam(sam.file,sub(".bam$","",bam.file),indexDestination=TRUE,overwrite=TRUE)
     bam.file
   },fq.files,bam.files)
 
+  data.frame(reference=bowtie_index,fq.file=fq.files,bam.file=bam.files,stringsAsFactors = FALSE)
 }
 
 
-#' @export
+#' Quantify number of read starting at each position of the genome
 #'
-EMOTE_quantify <- function(bam.files,remove.umi.duplicate=TRUE,mode=c("unambiguous","ambiguous","all"),...) {
+#' Quantify number of read starting at each position of the genome with optional
+#' UMI correction
+#'
+#' @param bam.files the input bam files to process
+#' @param plus.bw.files names of the output BigWigFile that will store coverage for the positive strand
+#' @param minus.bw.files names of the output BigWigFile that will store coverage for the negative strand
+#' @param remove.umi.duplicate a logical telling whether the umi correction must be done
+#' @param mode the quantification mode to use: either all reads, either only ambiguous reads or only unambiguous reads.
+#'   Reads with a mapping quality of 0 are considered ambiguously mapped.
+#' @param yieldSize yieldSize value passed to BamFile to process input file by chunks when limited amount of memory is available
+#' @export
+#' @import rtracklayer
+EMOTE_quantify <- function(
+    bam.files,
+    plus.bw.files=sub(".bam$",".plus.bw",bam.files),
+    minus.bw.files=sub(".bam$",".minus.bw",bam.files),
+    remove.umi.duplicate=TRUE,
+    mode=c("unambiguous","ambiguous","all"),
+    yieldSize=NA_integer_
+  ) {
+  # check parameters
   mode <- match.arg(mode)
+  if (length(plus.bw.files) != length(bam.files)) stop("plus.bw.files must be of the same length than bam.files")
+  if (length(minus.bw.files) != length(bam.files)) stop("minus.bw.files must be of the same length than bam.files")
 
-  o <- lapply(bam.files,function(bam.file) {
-    bf <- BamFile(bam.file,...)
-    open(bf)
-    on.exit(close(bf))
-    totalMode <- totalMap <- covPos <- covNeg <- 0
+  out <- data.frame(bam.file=bam.files,bw.file.plus=plus.bw.files,bw.file.minus=minus.bw.files,TotalMap=NA_real_,TotalAmbiguous=NA_real_,TotalUnambiguous=NA_real_,stringsAsFactors=FALSE)
+  for(i in seq_along(bam.files)) {
+    bf <- BamFile(out$bam.file[i],yieldSize=yieldSize)
+    open(bf);on.exit(close(bf))
+
+    totalAmbiguous <- totalUnambiguous <- totalMap <- covPos <- covNeg <- 0
     while(length(gr <- readGAlignments(bf,use.names = TRUE,param = ScanBamParam(what="mapq")))>0) {
-      names(gr) <- sub(":.*","",names(gr)) # parse UMI from read name prefix
+      # update summary statistics
       totalMap <- totalMap + length(gr)
+      totalAmbiguous <- totalAmbiguous + sum(mcols(gr)$mapq==0)
+      totalUnambiguous <- totalUnambiguous + sum(mcols(gr)$mapq>0)
+
+      # subset the reads depending on the mode used
+      names(gr) <- sub(":.*","",names(gr)) # parse UMI from read name prefix
       switch(mode,
              unambiguous = {gr <- subset(gr,mapq>0)},
              ambiguous = {gr <- subset(gr,mapq==0)},
              all = {}
       )
       gr <- granges(gr)
-      totalMode <- totalMode + length(gr)
 
       # remove PCR duplicates (with identical position for a given UMI)
       if (remove.umi.duplicate) {
         gr <- split(resize(gr,1,use.names=FALSE),names(gr))
         gr <- unlist(unique(gr))
       }
+
+      # update coverage values
       covPos <- coverage(subset(gr,strand!="-")) + covPos
       covNeg <- coverage(subset(gr,strand=="-")) + covNeg
     }
     covPos <- subset(GRanges(covPos,strand="+"),score>0)
     covNeg <- subset(GRanges(covNeg,strand="-"),score>0)
 
-    o <- c(covPos,covNeg)
-    metadata(o)$TotalMap <- totalMap
-    metadata(o)$TotalMode <- totalMode
-    o
-  })
+    # output coverage in bigwig format
+    export.bw(covPos,BigWigFile(out$bw.file.plus[i]))
+    export.bw(covNeg,BigWigFile(out$bw.file.minus[i]))
+    out$TotalMap[i] <- totalMap
+    out$TotalAmbiguous[i] <- totalAmbiguous
+    out$TotalUnambiguous[i] <- totalUnambiguous
+  }
+  out
+}
 
-  setNames(o,bam.files)
+
+
+
+EMOTE_bw_merge <- function() {
+
 }
 
 
