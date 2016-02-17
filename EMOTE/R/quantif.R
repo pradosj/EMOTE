@@ -16,7 +16,7 @@ EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("T
        read = narrow(sr,31)
   )
   X <- within(X,{
-    is_valid_EMOTE_read <- vcountPattern("CGGCACCAACCGAGG",recognition,max.mismatch=max.mismatch)>0
+    is_valid_EMOTE_read <- vcountPattern("CGGCACCAACCGAGG",recognition,max.mismatch=.(max.mismatch))>0
     is_valid_EMOTE_read <- is_valid_EMOTE_read & (control==DNAString("CGC"))
     is_valid_EMOTE_read <- is_valid_EMOTE_read & as.vector(letterFrequency(umi,"ACG")==width(umi))
     is_valid_EMOTE_read <- is_valid_EMOTE_read & (is.null(.(valid.barcodes)) | (barcode %in% .(valid.barcodes)))
