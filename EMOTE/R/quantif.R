@@ -7,7 +7,7 @@
 #' @export
 #' @import S4Vectors
 #' @import Biostrings
-EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("TACA","GTAT","CGTC","AAGT","ACAC","GGTA","GCCT","TCGG","CAAG","TTGA","GCTG","CCGA","CTCG"))) {
+EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("TACA","GTAT","CGTC","AAGT","ACAC","GGTA","GCCT","TCGG","CAAG","TTGA","GCTG","CCGA","CTCG","AGGA","ATTG","GACG","TGTT"))) {
   X <- DataFrame(first_nt = narrow(sread(sr),1,1),
        barcode = narrow(sread(sr),2,5),
        recognition = narrow(sread(sr),6,20),
@@ -16,10 +16,11 @@ EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("T
        read = narrow(sr,31)
   )
   X <- within(X,{
-    is_valid_EMOTE_read <- vcountPattern("CGGCACCAACCGAGG",recognition,max.mismatch=.(max.mismatch))>0
-    is_valid_EMOTE_read <- is_valid_EMOTE_read & (control==DNAString("CGC"))
-    is_valid_EMOTE_read <- is_valid_EMOTE_read & as.vector(letterFrequency(umi,"ACG")==width(umi))
-    is_valid_EMOTE_read <- is_valid_EMOTE_read & (is.null(.(valid.barcodes)) | (barcode %in% .(valid.barcodes)))
+    is_valid_recognition <- vcountPattern("CGGCACCAACCGAGG",recognition,max.mismatch=.(max.mismatch))>0
+    is_valid_control <- control==DNAString("CGC")
+    is_valid_umi <- as.vector(letterFrequency(umi,"ACG")==width(umi))
+    is_valid_barcode <- (is.null(.(valid.barcodes)) | (barcode %in% .(valid.barcodes)))
+    is_valid_EMOTE_read <- is_valid_recognition & is_valid_control & is_valid_umi & is_valid_barcode
   })
   return(X)
 }
@@ -99,12 +100,12 @@ EMOTE_map <- function(bowtie_index,fq.files,bam.files=sub("(.fastq|.fq)(.gz)?$",
       gunzip(gz.file,fq.file <- tempfile(fileext=".fq"))
     }
     sam.file <- tempfile(fileext=".sam")
-    bowtie(sam=TRUE,best=TRUE,M=1,sequences=fq.file,index=bowtie_index,outfile=sam.file,threads=threads)
+    bowtie(sam=TRUE,best=TRUE,M=1,sequences=fq.file,index=bowtie_index,outfile=sam.file,threads=threads,v=1)
     asBam(sam.file,sub(".bam$","",bam.file),indexDestination=TRUE,overwrite=TRUE)
     bam.file
   },fq.files,bam.files)
 
-  data.frame(reference=bowtie_index,fq.file=fq.files,bam.file=bam.files,stringsAsFactors = FALSE)
+  data.frame(reference=bowtie_index,demultiplexed.fastq=fq.files,bam.file=bam.files,stringsAsFactors = FALSE)
 }
 
 
@@ -114,8 +115,7 @@ EMOTE_map <- function(bowtie_index,fq.files,bam.files=sub("(.fastq|.fq)(.gz)?$",
 #' UMI correction
 #'
 #' @param bam.files the input bam files to process
-#' @param plus.bw.files names of the output BigWigFile that will store coverage for the positive strand
-#' @param minus.bw.files names of the output BigWigFile that will store coverage for the negative strand
+#' @param quantif.files names of the output RData file that store the coverage
 #' @param remove.umi.duplicate a logical telling whether the umi correction must be done
 #' @param mode the quantification mode to use: either all reads, either only ambiguous reads or only unambiguous reads.
 #'   Reads with a mapping quality of 0 are considered ambiguously mapped.
@@ -124,20 +124,15 @@ EMOTE_map <- function(bowtie_index,fq.files,bam.files=sub("(.fastq|.fq)(.gz)?$",
 #' @import rtracklayer
 EMOTE_quantify <- function(
     bam.files,
-    plus.bw.files=sub(".bam$",".plus.bw",bam.files),
-    minus.bw.files=sub(".bam$",".minus.bw",bam.files),
+    quantif.files=sub(".bam$",".quantif.RData",bam.files),
     remove.umi.duplicate=TRUE,
     mode=c("unambiguous","ambiguous","all"),
     yieldSize=NA_integer_
   ) {
-  # check parameters
-  mode <- match.arg(mode)
-  if (length(plus.bw.files) != length(bam.files)) stop("plus.bw.files must be of the same length than bam.files")
-  if (length(minus.bw.files) != length(bam.files)) stop("minus.bw.files must be of the same length than bam.files")
 
-  out <- data.frame(bam.file=bam.files,bw.file.plus=plus.bw.files,bw.file.minus=minus.bw.files,TotalMap=NA_real_,TotalAmbiguous=NA_real_,TotalUnambiguous=NA_real_,stringsAsFactors=FALSE)
-  for(i in seq_along(bam.files)) {
-    bf <- BamFile(out$bam.file[i],yieldSize=yieldSize)
+  # helper function that do the job for a single BAM file
+  quantify_single_bam <- function(bam.file,remove.umi.duplicate,mode,yieldSize) {
+    bf <- BamFile(bam.file,yieldSize=yieldSize)
     open(bf);on.exit(close(bf))
 
     totalAmbiguous <- totalUnambiguous <- totalMap <- covPos <- covNeg <- 0
@@ -163,20 +158,32 @@ EMOTE_quantify <- function(
       }
 
       # update coverage values
-      covPos <- coverage(subset(gr,strand!="-")) + covPos
+      covPos <- coverage(subset(gr,strand!="+")) + covPos
       covNeg <- coverage(subset(gr,strand=="-")) + covNeg
     }
     covPos <- subset(GRanges(covPos,strand="+"),score>0)
     covNeg <- subset(GRanges(covNeg,strand="-"),score>0)
 
-    # output coverage in bigwig format
-    export.bw(covPos,BigWigFile(out$bw.file.plus[i]))
-    export.bw(covNeg,BigWigFile(out$bw.file.minus[i]))
-    out$TotalMap[i] <- totalMap
-    out$TotalAmbiguous[i] <- totalAmbiguous
-    out$TotalUnambiguous[i] <- totalUnambiguous
+    cov <- c(covPos,covNeg)
+    metadata(cov) <- data.frame(stringsAsFactors=FALSE,
+      TotalMap=totalMap,
+      TotalAmbiguous=totalAmbiguous,
+      TotalUnambiguous=totalUnambiguous
+    )
+    cov
   }
-  out
+
+  # check parameters
+  mode <- match.arg(mode)
+  if (length(quantif.files) != length(bam.files)) stop("plus.bw.files must be of the same length than bam.files")
+
+  out <- mapply(function(bam.file,quantif.file) {
+    x <- quantify_single_bam(bam.file,remove.umi.duplicate,mode,yieldSize)
+    save(x,file=quantif.file)
+    metadata(x)$quantif.file <- quantif.file
+    metadata(x)
+  },bam.files,quantif.files,SIMPLIFY = FALSE)
+  stack(SplitDataFrameList(out),"bam.file")
 }
 
 
