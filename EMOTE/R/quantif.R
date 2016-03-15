@@ -111,11 +111,12 @@ gunzip <- function(gz.file,dest.file) {
 #' @export
 #' @import Rbowtie
 #' @import Rsamtools
-EMOTE_map <- function(bowtie_index,fq.file,bam.file=sub("(.fastq|.fq)(.gz)?$",".bam",fq.files),threads=3) {
+EMOTE_map <- function(bowtie_index,fq.file,bam.file=sub("(.fastq|.fq)(.gz)?$",".bam",fq.files),force=FALSE,threads=3) {
+  if (!all(grepl("\\.bam$",bam.file))) stop("bam.file must end with .bam suffix")
+  if (!force && file.exists(bam.file)) return(bam.file)
   fq.file <- as.character(fq.file)
-  if (!all(grepl("\\.bam$",bam.files))) stop("bam.files must end with .bam suffix")
 
-  if (grepl(".gz$",fq.file)) {
+  if (all(grepl(".gz$",fq.file))) {
     gz.file <- fq.file
     gunzip(gz.file,fq.file <- tempfile(fileext=".fq"))
   }
@@ -123,7 +124,7 @@ EMOTE_map <- function(bowtie_index,fq.file,bam.file=sub("(.fastq|.fq)(.gz)?$",".
   bowtie(sam=TRUE,best=TRUE,M=1,sequences=fq.file,index=bowtie_index,outfile=sam.file,threads=threads,v=1)
   asBam(sam.file,sub(".bam$","",bam.file),indexDestination=TRUE,overwrite=TRUE)
 
-  data.frame(reference=bowtie_index,fastq=fq.file,bam.file=bam.file,stringsAsFactors = FALSE)
+  return(bam.file)
 }
 
 
