@@ -111,16 +111,22 @@ gunzip <- function(gz.file,dest.file) {
 #' @export
 #' @import Rbowtie
 #' @import Rsamtools
-EMOTE_map <- function(bowtie_index,fq.file,bam.file=sub("(.fastq|.fq)(.gz)?$",".bam",fq.files),force=FALSE,threads=3) {
+EMOTE_map <- function(bowtie_index,fq.file,bam.file=sub("(.fastq|.fq)(.gz)?$",".bam",fq.file),force=FALSE,threads=3) {
   if (!all(grepl("\\.bam$",bam.file))) stop("bam.file must end with .bam suffix")
   if (!force && file.exists(bam.file)) return(bam.file)
   fq.file <- as.character(fq.file)
+  bowtie_index <- as.character(bowtie_index)
 
   if (all(grepl(".gz$",fq.file))) {
     gz.file <- fq.file
     gunzip(gz.file,fq.file <- tempfile(fileext=".fq"))
   }
   sam.file <- tempfile(fileext=".sam")
+
+  # map with Bowtie
+  #     -v 1: no more than V mismatches in the alignment
+  #   --best: guarantee that reported alignments are best in number of mismatches
+  #     -M 1: report only one random alignment when more than M alignment for the read
   bowtie(sam=TRUE,best=TRUE,M=1,sequences=fq.file,index=bowtie_index,outfile=sam.file,threads=threads,v=1)
   asBam(sam.file,sub(".bam$","",bam.file),indexDestination=TRUE,overwrite=TRUE)
 
