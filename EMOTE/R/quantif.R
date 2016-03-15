@@ -42,7 +42,12 @@ EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("T
 #' @import ShortRead
 EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),force=FALSE,yieldSize=1e6,...) {
   if (dir.exists(out.dir)) {
-    if (!force) stop("out.dir already exists")
+    if (!force) {
+      cat("The output directory already exists => load demultiplexing report from cache. Use force=TRUE to force building the output.\n")
+      parsing_report <- read.table(file.path(out.dir,"parsing_report.txt"),sep="\t",header=TRUE)
+      demultiplex_report <- read.table(file.path(out.dir,"demultiplex_report.txt"),sep="\t",header=TRUE)
+      return(merge(parsing_report,demultiplex_report,by="source",all=TRUE))
+    }
     unlink(out.dir,recursive=TRUE)
   }
   dir.create(out.dir)
