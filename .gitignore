@@ -14,3 +14,6 @@ NAMESPACE
 vignettes/*.html
 vignettes/*.pdf
 .Rproj.user
+
+test/
+
