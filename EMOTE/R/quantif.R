@@ -35,12 +35,12 @@ EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("T
 #' @param fq.file a character with the path of the FASTQ file (eventually gzipped) containing single-end EMOTE reads
 #' @param out.dir a character with the path of the output directory where the demultiplexed FASTQ files will be stored
 #' @param force when TRUE recursively remove the content of out.dir instead of stopping with an error message
-#' @param invalid.reads path of the FASTQ file that will contains all invalid reads
+#' @param invalid.reads logical saying whether invalid reads should be outputed
 #' @param yieldSize number of read to read at once
 #' @param ... additional parameters are passed to EMOTE_parse_reads
 #' @export
 #' @import ShortRead
-EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),force=FALSE,yieldSize=1e6,...) {
+EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),force=FALSE,yieldSize=1e6,invalid.reads=TRUE,...) {
   if (dir.exists(out.dir)) {
     if (!force) {
       cat("The output directory already exists => load demultiplexing report from cache. Use force=TRUE to force building the output.\n")
@@ -69,6 +69,7 @@ EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),for
     # output read sequences into separate files
     local({
       FQ <- split(fq,X$barcode_group)
+      if (!invalid.reads) FQ$invalid_EMOTE_read <- NULL
       fn <- file.path(out.dir,paste0(names(FQ),".fastq.gz"))
       mapply(writeFastq, FQ, fn, MoreArgs = list(compress=TRUE,mode="a"))
     })
@@ -95,10 +96,10 @@ EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),for
   }
   write.table(parsing_report,file=file.path(out.dir,"parsing_report.txt"),sep="\t",row.names=FALSE)
   write.table(demultiplex_report,file=file.path(out.dir,"demultiplex_report.txt"),sep="\t",row.names=FALSE)
-  merge(parsing_report,demultiplex_report,by="source",all=TRUE)
+  return(merge(parsing_report,demultiplex_report,by="source",all=TRUE))
 }
 
-
+#' Helper function that unzip a gzfile to the given destination
 gunzip <- function(gz.file,dest.file) {
   gz.file <- gzfile(gz.file,"rb");on.exit(close(gz.file))
   dest.file <- file(dest.file,"wb");on.exit(close(dest.file))
