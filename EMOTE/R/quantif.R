@@ -40,42 +40,57 @@ EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("T
 #' @param ... additional parameters are passed to EMOTE_parse_reads
 #' @export
 #' @import ShortRead
-EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),force=FALSE,invalid.reads=NULL,yieldSize=1e6,...) {
+EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),force=FALSE,yieldSize=1e6,...) {
   if (dir.exists(out.dir)) {
     if (!force) stop("out.dir already exists")
     unlink(out.dir,recursive=TRUE)
   }
   dir.create(out.dir)
 
-  if (!is.null(invalid.reads) && file.exists(invalid.reads)) {
-    stop("the file invalid.reads already exists")
-  }
-
   f <- FastqStreamer(fq.file,yieldSize)
   on.exit(close(f))
 
-  demux.report <- list(
-    summary = data.frame(source=fq.file,total.read.count = 0,total.valid = 0),
-    read.counts = data.frame(source=character(),index=character(),demultiplexed.fastq=character(),n=integer())
-  )
-  while (length(fq <- yield(f))) {
-    X <- EMOTE_parse_reads(fq,...)
-    X$read@id <- xscat(BStringSet(X$umi),":",id(X$read))
-    if (!is.null(invalid.reads)) writeFastq(fq[!X$is_valid_EMOTE_read],invalid.reads,mode="a")
-    X <- subset(X,is_valid_EMOTE_read)
-    X <- split(X$read,as.character(X$barcode))
-    fn <- file.path(out.dir,paste0(names(X),".fq.gz"))
-    mapply(writeFastq, X, fn, MoreArgs = list(compress=TRUE,mode="a"))
 
-    demux.report <- within(demux.report,{
-      summary$total.read.count <- summary$total.read.count + length(fq)
-      summary$total.valid <- summary$total.valid + sum(elementLengths(X))
-      read.counts <- merge(all=TRUE,read.counts,data.frame(source=fq.file,index=names(X),demultiplexed.fastq=fn,n=elementLengths(X)),by=c("source","index","demultiplexed.fastq"))
-      read.counts$n <- rowSums(cbind(read.counts$n.x,read.counts$n.y),na.rm=TRUE)
-      read.counts$n.x <- read.counts$n.y <- NULL
+  parsing_report <- data.frame(source = fq.file,read.count = 0,valid.read = 0,invalid.contol = 0,invalid.barcode = 0,invalid.umi = 0,invalid.recognition = 0)
+  demultiplex_report <- data.frame(source=character(),barcode=character(),mapseq.fastq=character(),num_mapseq=integer())
+
+  while (length(fq <- yield(f))) {
+    # parse the reads
+    X <- EMOTE_parse_reads(fq,...)
+    X$barcode_group <- as.character(X$barcode)
+    X$barcode_group[!X$is_valid_EMOTE_read] <- "invalid_EMOTE_read"
+    X$barcode_group <- factor(X$barcode_group)
+
+    # output read sequences into separate files
+    local({
+      FQ <- split(fq,X$barcode_group)
+      fn <- file.path(out.dir,paste0(names(FQ),".fastq.gz"))
+      mapply(writeFastq, FQ, fn, MoreArgs = list(compress=TRUE,mode="a"))
     })
+
+    # output valid mapping sequences
+    Z <- subset(X,is_valid_EMOTE_read)
+    Z$read@id <- xscat(BStringSet(Z$umi),":",id(Z$read))
+    Z <- split(Z$read,Z$barcode_group[drop=TRUE])
+    mapseq.fastq <- file.path(out.dir,paste0(names(Z),"_mapseq.fastq.gz"))
+    mapply(writeFastq, Z, mapseq.fastq, MoreArgs = list(compress=TRUE,mode="a"))
+
+    # update parsing_report
+    parsing_report$read.count <- parsing_report$read.count + length(fq)
+    parsing_report$valid.read <- parsing_report$valid.read + sum(X$is_valid_EMOTE_read)
+    parsing_report$invalid.contol <- parsing_report$invalid.contol + sum(!X$is_valid_control)
+    parsing_report$invalid.barcode <- parsing_report$invalid.barcode + sum(!X$is_valid_barcode)
+    parsing_report$invalid.umi <- parsing_report$invalid.umi + sum(!X$is_valid_umi)
+    parsing_report$invalid.recognition <- parsing_report$invalid.recognition + sum(!X$is_valid_recognition)
+
+    # update demultiplex_report
+    demultiplex_report <- merge(all=TRUE,demultiplex_report,data.frame(source=fq.file,barcode=names(Z),mapseq.fastq=mapseq.fastq,num_mapseq=elementLengths(Z)),by=c("source","barcode","mapseq.fastq"))
+    demultiplex_report$num_mapseq <- rowSums(cbind(demultiplex_report$num_mapseq.x,demultiplex_report$num_mapseq.y),na.rm=TRUE)
+    demultiplex_report$num_mapseq.x <- demultiplex_report$num_mapseq.y <- NULL
   }
-  demux.report
+  write.table(parsing_report,file=file.path(out.dir,"parsing_report.txt"),sep="\t",row.names=FALSE)
+  write.table(demultiplex_report,file=file.path(out.dir,"demultiplex_report.txt"),sep="\t",row.names=FALSE)
+  merge(parsing_report,demultiplex_report,by="source",all=TRUE)
 }
 
 
