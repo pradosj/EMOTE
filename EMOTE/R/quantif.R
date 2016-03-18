@@ -220,7 +220,7 @@ EMOTE_quantify <- function(
 EMOTE_bw_merge <- function(pos.bw.files,neg.bw.files) {
   Q <- mapply(function(p,n) {
     pos <- GRanges(import.bw(p),strand="+")
-    neg <- GRanges(import.bw(p),strand="-")
+    neg <- GRanges(import.bw(n),strand="-")
     subset(c(pos,neg),score>0)
   },pos.bw.files,neg.bw.files)
   Q <- stack(GRangesList(unname(Q)))
