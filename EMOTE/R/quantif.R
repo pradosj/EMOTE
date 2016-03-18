@@ -184,10 +184,10 @@ EMOTE_quantify <- function(
 
         # subset the reads depending on the mode used
         names(gr) <- sub(":.*","",names(gr)) # parse UMI from read name prefix
-        switch(mode,
-               unambiguous = {gr <- subset(gr,mapq>0)},
-               ambiguous = {gr <- subset(gr,mapq==0)},
-               all = {}
+        gr <- switch(mode,
+               unambiguous = subset(gr,mapq>0),
+               ambiguous = subset(gr,mapq==0),
+               all = gr
         )
         gr <- granges(gr)
 
@@ -198,7 +198,7 @@ EMOTE_quantify <- function(
         }
 
         # update coverage values
-        covPos <- coverage(subset(gr,strand!="+")) + covPos
+        covPos <- coverage(subset(gr,strand!="-")) + covPos
         covNeg <- coverage(subset(gr,strand=="-")) + covNeg
     }
 
