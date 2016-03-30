@@ -210,19 +210,26 @@ EMOTE_quantify <- function(
 }
 
 
+#' Read a quantification from a positive and a negative bigWig file
+#'
+#' @param pos.file BigWig for positive strand
+#' @param neg.file BigWig for negative strand
+#' @export
+EMOTE_read_bw_quantif <- function(pos.file,neg.file) {
+  pos <- GRanges(import.bw(pos.file),strand="+")
+  neg <- GRanges(import.bw(neg.file),strand="-")
+  subset(c(pos,neg),score>0)
+}
+
 
 #' Merge several bigwig files into a SummarizedExperiment
 #'
 #' Merge several bigwig files into a SummarizedExperiment
-#' @param pos.bw the input bam files to process
-#' @param neg.bw names of the output RData file that store the coverage
+#' @param pos.bw.files the input bam files to process
+#' @param neg.bw.files names of the output RData file that store the coverage
 #' @export
 EMOTE_bw_merge <- function(pos.bw.files,neg.bw.files) {
-  Q <- mapply(function(p,n) {
-    pos <- GRanges(import.bw(p),strand="+")
-    neg <- GRanges(import.bw(n),strand="-")
-    subset(c(pos,neg),score>0)
-  },pos.bw.files,neg.bw.files)
+  Q <- mapply(EMOTE_read_bw_quantif,pos.bw.files,neg.bw.files)
   Q <- stack(GRangesList(unname(Q)))
 
   i <- disjoin(Q)
