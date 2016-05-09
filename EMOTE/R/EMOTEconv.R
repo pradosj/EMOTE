@@ -14,12 +14,11 @@ readEMOTE <- function(zip.file,ambig=FALSE) {
   # Extract filenames to load from zip archives
   zip.filelist <- unzip(zip.file,list=TRUE)$Name
   zip.filelist <- zip.filelist[!grepl("^\\.",basename(zip.filelist))]
+  pos.file <- grep("UnambPosTable.csv$",zip.filelist,value=TRUE,ignore.case=TRUE)
+  neg.file <- grep("UnambNegTable.csv$",zip.filelist,value=TRUE,ignore.case=TRUE)
   if (ambig) {
     pos.file <- setdiff(grep("AmbPosTable.csv$",zip.filelist,value=TRUE,ignore.case=TRUE),pos.file)
     neg.file <- setdiff(grep("AmbNegTable.csv$",zip.filelist,value=TRUE,ignore.case=TRUE),neg.file)
-  } else {
-    pos.file <- grep("UnambPosTable.csv$",zip.filelist,value=TRUE,ignore.case=TRUE)
-    neg.file <- grep("UnambNegTable.csv$",zip.filelist,value=TRUE,ignore.case=TRUE)
   }
   ss.file <- grep("EmoteBarcode(s?)Report.(txt|csv)$",zip.filelist,value=TRUE,ignore.case=TRUE)
 
