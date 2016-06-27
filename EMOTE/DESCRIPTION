@@ -6,8 +6,8 @@ Date: 2016-01-14
 Author: Julien Prados
 Maintainer: Julien Prados <julien.prados@unige.ch>
 Description: EMOTE is a biological protocol for Exact Mapping of Transcripts
-    Ends. The package contains helper functions to analyse sequencing data generated
-    with EMOTE protocol.
+    Ends. The package contains helper functions to analyse sequencing data
+    generated with EMOTE protocol.
 License: GPL-3
 LazyData: TRUE
 RoxygenNote: 5.0.1

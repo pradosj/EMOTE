@@ -15,13 +15,11 @@ EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("T
        control = narrow(sread(sr),28,30),
        read = narrow(sr,31)
   )
-  X <- within(X,{
-    is_valid_recognition <- vcountPattern("CGGCACCAACCGAGG",recognition,max.mismatch=.(max.mismatch))>0
-    is_valid_control <- control==DNAString("CGC")
-    is_valid_umi <- as.vector(letterFrequency(umi,"ACG")==width(umi))
-    is_valid_barcode <- (is.null(.(valid.barcodes)) | (barcode %in% .(valid.barcodes)))
-    is_valid_EMOTE_read <- is_valid_recognition & is_valid_control & is_valid_umi & is_valid_barcode
-  })
+  X$is_valid_recognition <- vcountPattern("CGGCACCAACCGAGG",X$recognition,max.mismatch=max.mismatch)>0
+  X$is_valid_control <- X$control==DNAString("CGC")
+  X$is_valid_umi <- as.vector(letterFrequency(X$umi,"ACG")==width(X$umi))
+  X$is_valid_barcode <- (is.null(valid.barcodes) | (X$barcode %in% valid.barcodes))
+  X$is_valid_EMOTE_read <- X$is_valid_recognition & X$is_valid_control & X$is_valid_umi & X$is_valid_barcode
   return(X)
 }
 
@@ -34,7 +32,7 @@ EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("T
 #'
 #' @param fq.file a character with the path of the FASTQ file (eventually gzipped) containing single-end EMOTE reads
 #' @param out.dir a character with the path of the output directory where the demultiplexed FASTQ files will be stored
-#' @param force when TRUE recursively remove the content of out.dir instead of stopping with an error message
+#' @param force when TRUE recursively remove the content of out.dir before running instead of stopping the function with an error message
 #' @param invalid.reads logical saying whether invalid reads should be outputed
 #' @param yieldSize number of read to read at once
 #' @param ... additional parameters are passed to EMOTE_parse_reads
@@ -50,15 +48,19 @@ EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),for
     }
     unlink(out.dir,recursive=TRUE)
   }
+
+  # create the ouptut directory
   dir.create(out.dir)
 
+  # initilialize a streamer on the input file
   f <- FastqStreamer(fq.file,yieldSize)
   on.exit(close(f))
 
-
+  # initialize reporting data
   parsing_report <- data.frame(source = fq.file,read.count = 0,valid.read = 0,invalid.contol = 0,invalid.barcode = 0,invalid.umi = 0,invalid.recognition = 0)
   demultiplex_report <- data.frame(source=character(),barcode=character(),mapseq.fastq=character(),num_mapseq=integer())
 
+  # loop over all reads of the input FASTQ file
   while (length(fq <- yield(f))) {
     # parse the reads
     X <- EMOTE_parse_reads(fq,...)
