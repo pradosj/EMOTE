@@ -9,7 +9,7 @@
 #' @import IRanges
 #' @import GenomicRanges
 #' @author Julien Prados
-readEMOTE <- function(zip.file,ambig=FALSE) {
+EMOTE_readConvOutput <- function(zip.file,ambig=FALSE) {
 
   # Extract filenames to load from zip archives
   zip.filelist <- unzip(zip.file,list=TRUE)$Name
