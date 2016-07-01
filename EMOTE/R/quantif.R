@@ -94,18 +94,15 @@ EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("T
 #' @import ShortRead
 EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),force=FALSE,yieldSize=1e6,invalid.reads=TRUE,...) {
   demux.report.file <- file.path(out.dir,"demultiplex_report.txt")
-  if (file.exists(demux.report.file)) {
-    if (!force) {
+  if (file.exists(demux.report.file) && !force) {
       warning("The output directory already exists => load demultiplexing report from cache. Use force=TRUE to force building the output.\n")
       X <- read.table(demux.report.file,sep="\t",header=TRUE,stringsAsFactors=FALSE)
       if (!invalid.reads) X <- subset(X,barcode!="INVALID")
       return(X)
-    }
-    unlink(out.dir,recursive=TRUE)
   }
 
   # create the ouptut directory
-  dir.create(out.dir)
+  dir.create(out.dir,showWarnings=FALSE)
 
   # initilialize a streamer on the input file
   f <- FastqStreamer(fq.file,yieldSize)
@@ -178,7 +175,10 @@ EMOTE_map <- function(
   force=FALSE,threads=3,yieldSize=1e6,...
 ) {
   if (!all(grepl("\\.bam$",bam.file))) stop("bam.file must end with .bam suffix")
-  if (!force && file.exists(bam.file)) return(bam.file)
+  if (!force && file.exists(bam.file)) {
+    warning("The BAM file already exists. Use force=TRUE to force recomputing")
+    return(bam.file)
+  }
   fq.file <- as.character(fq.file)
   bowtie_index <- as.character(bowtie_index)
 
@@ -205,23 +205,84 @@ EMOTE_map <- function(
 }
 
 
+#' Helper function to write an EMOTE quantification file
+#' @import rtracklayer
+EMOTE_write_quantif <- function(covPos,covNeg,R,file) {
+  dir.create(file,showWarnings=FALSE)
+  report.file <- file.path(file,"report.txt")
+  pos.bw.file <- file.path(file,"positive_strand.bw")
+  neg.bw.file <- file.path(file,"negative_strand.bw")
+  write.table(R,file=report.file,sep="\t",row.names=FALSE)
+  export.bw(covPos,pos.bw.file)
+  export.bw(covNeg,neg.bw.file)
+}
+
+
+#' Load one or multiple EMOTE quantification files
+#'
+#' @param quantif.files a character vector listing the quantification directories to load
+#' @return a SummarizedExperiment object containing the quantification values for all samples
+#'         at each non-empty genomic location
+#' @export
+#' @import GenomicRanges
+#' @import SummarizedExperiment
+#' @import rtracklayer
+EMOTE_read_quantif <- function(quantif.files) {
+  report.files <- file.path(quantif.files,"report.txt")
+  pos.bw.files <- file.path(quantif.files,"positive_strand.bw")
+  neg.bw.files <- file.path(quantif.files,"negative_strand.bw")
+
+  # load thre report statistics
+  R <- lapply(report.files,read.table,sep="\t",header=TRUE,stringsAsFactors=FALSE)
+  R <- unlist(SplitDataFrameList(setNames(R,quantif.files)))
+
+  # load the counts from the BigWig files
+  cov <- local({
+    read.bw <- function(f,strand="*") {
+      x <- RleList(import.bw(f,as="RleList"))
+      pos <- which(x>0)
+      seq <- Rle(factor(names(pos),names(pos)),elementNROWS(pos))
+      n <- unlist(x[x>0],use.names = FALSE)
+      gr <- GRanges(seq,IRanges(unlist(pos),width=1),strand=strand,score=n)
+      seqlengths(gr) <- elementNROWS(x)
+      gr
+    }
+    covPos <- GRangesList(lapply(pos.bw.files,read.bw,strand="+"))
+    covNeg <- GRangesList(lapply(neg.bw.files,read.bw,strand="-"))
+    setNames(pc(covPos,covNeg),quantif.files)
+  })
+
+  # build the SummarizedExperiment object
+  gr <- unique(unlist(cov,use.names = FALSE))
+  mcols(gr) <- NULL
+  col <- togroup(PartitioningByEnd(cov))
+  row <- unlist(match(cov,gr))
+  n <- matrix(0,length(gr),length(cov))
+  n[cbind(row,col)] <- score(unlist(cov))
+
+  SummarizedExperiment(n,rowRanges=gr,colData=R)
+}
+
+
 #' Quantify number of read starting at each position of the genome
 #'
 #' Quantify number of read starting at each position of the genome with optional
-#' UMI correction
+#' UMI correction, and store the result in an output directory
 #'
 #' @param bam.file the input bam files to process
+#' @param quantif.file name of the output directory that will contain the quantification results
 #' @param remove.umi.duplicate a logical telling whether the umi correction must be done
 #' @param mode the quantification mode to use: either all reads, either only ambiguous reads or only unambiguous reads.
 #'   Reads with a mapping quality of 0 are considered ambiguously mapped.
 #' @param yieldSize yieldSize value passed to BamFile to process input file by chunks when limited amount of memory is available
+#' @return name of the generated quantification directory
 #' @export
 #' @import GenomicAlignments
 #' @import Rsamtools
-#' @import rtracklayer
+#' @import SummarizedExperiment
 EMOTE_quantify <- function(
     bam.file,
-    gff.file=paste0(bam.file,".gff.gz"),
+    quantif.file=paste0(bam.file,".quantif"),
     remove.umi.duplicate=TRUE,
     mode=c("unambiguous","ambiguous","all"),
     yieldSize=NA_integer_,
@@ -230,83 +291,49 @@ EMOTE_quantify <- function(
     # check parameters
     mode <- match.arg(mode)
 
+    # If the BED file already exists, load it and return
+    if (!force && file.exists(quantif.file)) {
+      warning("quantification file already exists. Use force=TRUE to force recomputing")
+      return(quantif.file)
+    }
     # open the BAM file and set the number of read to retreive at each iteration
     bf <- BamFile(bam.file,yieldSize=yieldSize)
     open(bf);on.exit(close(bf))
 
     # initialize the report and the coverage variables that will be updated at each iteration
     covPos <- covNeg <- 0
-    totalMap <- totalAmbiguous <- totalUnambiguous <- totalDedup <- 0
+    R <- DataFrame(bam.file=bam.file,totalMap=0,totalAmbiguous=0,totalUnambiguous=0,totalDedup=0)
 
     # iterate over all the reads of the BAM file by chunk
     while(length(gr <- readGAlignments(bf,use.names=TRUE,param=ScanBamParam(what="mapq")))>0) {
 
-        # update quantif_report statistics with the new chunk
-        totalMap <- totalMap + length(gr)
-        totalAmbiguous <- totalAmbiguous + sum(mcols(gr)$mapq==0)
-        totalUnambiguous <- totalUnambiguous + sum(mcols(gr)$mapq>0)
+      # update quantif_report statistics with the new chunk
+      R$totalMap <- R$totalMap + length(gr)
+      R$totalAmbiguous <- R$totalAmbiguous + sum(mcols(gr)$mapq==0)
+      R$totalUnambiguous <- R$totalUnambiguous + sum(mcols(gr)$mapq>0)
 
-        # subset the reads depending on the mode used
-        names(gr) <- sub(":.*","",names(gr)) # parse UMI from read name prefix
-        gr <- switch(mode,
-               unambiguous = gr[mcols(gr)$mapq>0],
-               ambiguous = gr[mcols(gr)$mapq==0],
-               all = gr
-        )
-        gr <- granges(gr)
+      # subset the reads depending on the mode used
+      names(gr) <- sub(":.*","",names(gr)) # parse UMI from read name prefix
+      gr <- switch(mode,
+                   unambiguous = gr[mcols(gr)$mapq>0],
+                   ambiguous = gr[mcols(gr)$mapq==0],
+                   all = gr
+      )
+      gr <- granges(gr)
 
-        # remove PCR duplicates (with identical position for a given UMI)
-        if (remove.umi.duplicate) {
-          gr <- split(resize(gr,1,use.names=FALSE),names(gr))
-          gr <- unlist(unique(gr))
-        }
-        totalDedup <- totalDedup + length(gr)
+      # remove PCR duplicates (with identical position for a given UMI)
+      if (remove.umi.duplicate) {
+        gr <- split(resize(gr,1,use.names=FALSE),names(gr))
+        gr <- unlist(unique(gr))
+      }
+      R$totalDedup <- R$totalDedup + length(gr)
 
-        # update coverage values
-        covPos <- coverage(gr[strand(gr)!="-"]) + covPos
-        covNeg <- coverage(gr[strand(gr)=="-"]) + covNeg
+      # update coverage values
+      covPos <- coverage(gr[strand(gr)!="-"]) + covPos
+      covNeg <- coverage(gr[strand(gr)=="-"]) + covNeg
     }
-
-    out <- c(GRanges(covPos,strand="+"),GRanges(covPos,strand="-"))
-    out <- out[score(out)>0]
-    metadata(out)$totalMap <- totalMap
-    metadata(out)$totalAmbiguous <- totalAmbiguous
-    metadata(out)$totalUnambiguous <- totalUnambiguous
-    metadata(out)$totalDedup <- totalDedup
-    return(out)
-}
-
-
-#' Read a quantification from a positive and a negative bigWig file
-#'
-#' @param pos.file BigWig for positive strand
-#' @param neg.file BigWig for negative strand
-#' @export
-EMOTE_read_bw_quantif <- function(pos.file,neg.file) {
-  pos <- GRanges(import.bw(pos.file),strand="+")
-  neg <- GRanges(import.bw(neg.file),strand="-")
-  subset(c(pos,neg),score>0)
-}
-
-
-#' Merge several bigwig files into a SummarizedExperiment
-#'
-#' Merge several bigwig files into a SummarizedExperiment
-#' @param pos.bw.files the input bam files to process
-#' @param neg.bw.files names of the output RData file that store the coverage
-#' @export
-EMOTE_bw_merge <- function(pos.bw.files,neg.bw.files) {
-  Q <- mapply(EMOTE_read_bw_quantif,pos.bw.files,neg.bw.files)
-  Q <- stack(GRangesList(unname(Q)))
-
-  i <- disjoin(Q)
-  h <- findOverlaps(i,Q)
-
-  N <- matrix(0,length(i),nlevels(Q$sample))
-  N[cbind(queryHits(h),as.integer(Q$sample)[subjectHits(h)])] <- score(Q)[subjectHits(h)]
-
-  E <- SummarizedExperiment(N,rowRanges=i,colData=DataFrame(pos.bw.file=pos.bw.files,neg.bw.file=neg.bw.files))
-  return(E)
+    EMOTE_write_quantif(covPos,covNeg,R,file=quantif.file)
+    return(quantif.file)
 }
 
 
