@@ -255,6 +255,7 @@ EMOTE_read_quantif <- function(quantif.files) {
   # build the SummarizedExperiment object
   gr <- unique(unlist(cov,use.names = FALSE))
   mcols(gr) <- NULL
+  gr <- sort(gr)
   col <- togroup(PartitioningByEnd(cov))
   row <- unlist(match(cov,gr))
   n <- matrix(0,length(gr),length(cov))
@@ -302,7 +303,7 @@ EMOTE_quantify <- function(
 
     # initialize the report and the coverage variables that will be updated at each iteration
     covPos <- covNeg <- 0
-    R <- DataFrame(bam.file=bam.file,totalMap=0,totalAmbiguous=0,totalUnambiguous=0,totalDedup=0)
+    R <- DataFrame(totalMap=0,totalAmbiguous=0,totalUnambiguous=0,totalDedup=0)
 
     # iterate over all the reads of the BAM file by chunk
     while(length(gr <- readGAlignments(bf,use.names=TRUE,param=ScanBamParam(what="mapq")))>0) {

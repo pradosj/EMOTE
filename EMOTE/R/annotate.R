@@ -8,6 +8,7 @@
 #' @param upstream number of required bases upstream
 #' @param downstream number of required bases downstream
 #' @return a DNAStringSet with the promoters sequences
+#' @import Rsamtools
 #' @export
 getPromoterSeq <- function(fa,gr,upstream=45,downstream=5) {
   seq.gr <- promoters(granges(gr),upstream,downstream)
