@@ -14,7 +14,7 @@ test/EMOTE04_1M.fastq.gz,GGTA,A2+,A2,+,A
 ")
 
 # Build the Bowtie index for the Sepi Genome
-#bowtie_build("test/Sepi12228.fa","test/Sepi12228.fa.bowtie")
+bowtie_build("test/Sepi12228.fa","test/Sepi12228.fa.bowtie")
 
 # Run EMOTE demultiplexing on the pooled FASTQ file
 demux.report <- EMOTE_demultiplex_fastq("test/EMOTE04_1M.fastq.gz")
@@ -32,7 +32,7 @@ demux.report$quantif.file <- sapply(demux.report$bam.file,EMOTE_quantify)
 
 # Load the quantification results
 q <- EMOTE_read_quantif(demux.report$quantif.file)
-colData(q) <- cbind(colData(q),demux.report)
+mcols(q) <- cbind(colData(q),demux.report)
 
 
 # filter the candidate position by requiring at least 5 read in one of the +RppH condition
