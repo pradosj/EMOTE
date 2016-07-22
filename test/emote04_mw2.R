@@ -3,6 +3,7 @@
 library(EMOTE)
 library(Rbowtie)
 library(rtracklayer)
+library(SummarizedExperiment)
 
 # Initialize the sample sheet for Sepi organism
 sample.sheet <- read.table(header=TRUE,sep=",",stringsAsFactors=FALSE,text="
@@ -32,7 +33,7 @@ demux.report$quantif.file <- sapply(demux.report$bam.file,EMOTE_quantify)
 
 # Load the quantification results
 q <- EMOTE_read_quantif(demux.report$quantif.file)
-mcols(q) <- cbind(colData(q),demux.report)
+colData(q) <- cbind(colData(q),demux.report)
 
 
 # filter the candidate position by requiring at least 5 read in one of the +RppH condition
