@@ -2,21 +2,22 @@
 
 library(EMOTE)
 library(Rbowtie)
+library(rtracklayer)
 
 # Initialize the sample sheet for Sepi organism
 sample.sheet <- read.table(header=TRUE,sep=",",stringsAsFactors=FALSE,text="
 source,barcode,library,assay,RppH,sample
-test/EMOTE04/EMOTE04_1M.fastq.gz,TTGA,A1-,A1,-,A
-test/EMOTE04/EMOTE04_1M.fastq.gz,GCTG,A1+,A1,+,A
-test/EMOTE04/EMOTE04_1M.fastq.gz,ACAC,A2-,A2,-,A
-test/EMOTE04/EMOTE04_1M.fastq.gz,GGTA,A2+,A2,+,A
+test/EMOTE04_1M.fastq.gz,TTGA,A1-,A1,-,A
+test/EMOTE04_1M.fastq.gz,GCTG,A1+,A1,+,A
+test/EMOTE04_1M.fastq.gz,ACAC,A2-,A2,-,A
+test/EMOTE04_1M.fastq.gz,GGTA,A2+,A2,+,A
 ")
 
 # Build the Bowtie index for the Sepi Genome
-#bowtie_build("test/EMOTE04/Sepi12228.fa","test/EMOTE04/Sepi12228.fa.bowtie")
+#bowtie_build("test/Sepi12228.fa","test/Sepi12228.fa.bowtie")
 
 # Run EMOTE demultiplexing on the pooled FASTQ file
-demux.report <- EMOTE_demultiplex_fastq("test/EMOTE04/EMOTE04_1M.fastq.gz")
+demux.report <- EMOTE_demultiplex_fastq("test/EMOTE04_1M.fastq.gz")
 
 # Merge resulting demultiplex report with the informations from the sample sheet
 demux.report <- merge(sample.sheet,demux.report,by=c("source","barcode"))
@@ -24,7 +25,7 @@ demux.report <- demux.report[order(demux.report$sample,demux.report$assay,demux.
 
 
 # Map demultiplexed reads and generate BAM files
-demux.report$bam.file <- sapply(demux.report$demux.fastq,EMOTE_map,bowtie_index="test/EMOTE04/Sepi12228.fa.bowtie/index")
+demux.report$bam.file <- sapply(demux.report$demux.fastq,EMOTE_map,bowtie_index="test/Sepi12228.fa.bowtie/index")
 
 # Quantify reads at each genomic position from the BAM files
 demux.report$quantif.file <- sapply(demux.report$bam.file,EMOTE_quantify)
@@ -89,7 +90,7 @@ mcols(q)$cluster.rank[unlist(k$revmap)] <- unlist(k$rank)
 #
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
-mcols(q)$seq <- getPromoterSeq(Rsamtools::FaFile("test/EMOTE04/Sepi12228.fa"),rowRanges(q))
+mcols(q)$seq <- getPromoterSeq(Rsamtools::FaFile("test/Sepi12228.fa"),rowRanges(q))
 
 
 #     # Test for presence of the TATAAT box in the sequence between pos -5 to -15
@@ -124,7 +125,7 @@ mcols(q)$seq <- getPromoterSeq(Rsamtools::FaFile("test/EMOTE04/Sepi12228.fa"),ro
 # TSS annotation with surrounding genes
 #
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
-gff <- import.gff("test/EMOTE04/GCF_000007645.1_ASM764v1_genomic.gff.gz",feature.type="gene")
+gff <- import.gff("test/GCF_000007645.1_ASM764v1_genomic.gff.gz",feature.type="gene")
 seqlevels(gff) <- sub("\\.[0-9]*$","",seqlevels(gff))
 
 h <- as(findOverlaps(rowRanges(q),gff),"IntegerList")
