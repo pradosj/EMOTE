@@ -43,16 +43,33 @@
 #' @export
 #' @import S4Vectors
 #' @import Biostrings
-EMOTE_parse_reads <- function(sr,max.mismatch=1,valid.barcodes=DNAStringSet(c("TACA","GTAT","CGTC","AAGT","ACAC","GGTA","GCCT","TCGG","CAAG","TTGA","GCTG","CCGA","CTCG","AGGA","ATTG","GACG","TGTT"))) {
-  X <- DataFrame(first_nt = narrow(sread(sr),1,1),
-       barcode = narrow(sread(sr),2,5),
-       recognition = narrow(sread(sr),6,20),
-       umi = narrow(sread(sr),21,27),
-       control = narrow(sread(sr),28,30),
-       read = narrow(sr,31)
+EMOTE_parse_reads <- function(
+  sr,
+  max.recognition.mismatch=1L,
+  valid.barcodes=DNAStringSet(c("TACA","GTAT","CGTC","AAGT","ACAC","GGTA","GCCT","TCGG","CAAG","TTGA","GCTG","CCGA","CTCG","AGGA","ATTG","GACG","TGTT")),
+  first.nuc.len=1L,
+  recognition.sequence="CGGCACCAACCGAGG",
+  umi.length=7L,
+  control.sequence="CGC"
+) {
+  barcode.length <- unique(nchar(valid.barcodes))
+  if (length(barcode.length)>1) stop("All barcode sequences must be of the same length")
+
+  bar.start <- 1L + first.nuc.len
+  rec.start <- bar.start + barcode.length
+  umi.start <- rec.start + nchar(recognition.sequence)
+  control.start <- umi.start + umi.length
+  read.start <- control.start + nchar(control.sequence)
+
+  X <- DataFrame(first_nt = narrow(sread(sr),1L,first.nuc.len),
+       barcode = narrow(sread(sr),bar.start,rec.start-1L),
+       recognition = narrow(sread(sr),rec.start,umi.start-1L),
+       umi = narrow(sread(sr),umi.start,control.start-1L),
+       control = narrow(sread(sr),control.start,read.start-1L),
+       read = narrow(sr,read.start)
   )
-  X$is_valid_recognition <- vcountPattern("CGGCACCAACCGAGG",X$recognition,max.mismatch=max.mismatch)>0
-  X$is_valid_control <- X$control==DNAString("CGC")
+  X$is_valid_recognition <- vcountPattern(recognition.sequence,X$recognition,max.mismatch=max.recognition.mismatch)>0
+  X$is_valid_control <- X$control==DNAString(control.sequence)
   X$is_valid_umi <- as.vector(letterFrequency(X$umi,"ACG")==width(X$umi))
   X$is_valid_barcode <- (is.null(valid.barcodes) | (X$barcode %in% valid.barcodes))
   X$is_valid_EMOTE_read <- X$is_valid_recognition & X$is_valid_control & X$is_valid_umi & X$is_valid_barcode
