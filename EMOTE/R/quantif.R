@@ -7,9 +7,17 @@
 #'
 #'
 #' @param sr a ShortRead object to parse
-#' @param max.mismatch number of mismatch allowed in the recognition sequence
+#' @param max.recognition.mismatch number of mismatch allowed in the recognition
+#'        sequence
 #' @param valid.barcodes a character vector listing valid barcodes. If NULL, all
 #'        barcodes are considered valid.
+#' @param first.nuc.len length of the first nucleotide sequence before EMOTE
+#'        recognition sequence start
+#' @param recognition.sequence a character with the recognition sequence to
+#'        detect in the reads
+#' @param umi.length length of the UMI sequence
+#' @param control.sequence a character specifying the control sequence to look
+#'        for in the read
 #' @return A DataFrame where the columns contains the elements parsed in the
 #'         input reads or a logical checking for the validity of the elements.
 #'         The fields are:
