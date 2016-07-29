@@ -264,7 +264,7 @@ EMOTE_read_quantif <- function(quantif.files) {
   # load the counts from the BigWig files
   cov <- local({
     read.bw <- function(f,strand="*") {
-      x <- RleList(import.bw(f,as="RleList"))
+      x <- import.bw(f,as="RleList")
       pos <- which(x>0)
       seq <- Rle(factor(names(pos),names(pos)),elementNROWS(pos))
       n <- unlist(x[x>0],use.names = FALSE)
