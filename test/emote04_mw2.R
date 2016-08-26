@@ -8,17 +8,17 @@ library(SummarizedExperiment)
 # Initialize the sample sheet for Sepi organism
 sample.sheet <- read.table(header=TRUE,sep=",",stringsAsFactors=FALSE,text="
 source,barcode,library,assay,RppH,sample
-test/EMOTE04_1M.fastq.gz,TTGA,A1-,A1,-,A
-test/EMOTE04_1M.fastq.gz,GCTG,A1+,A1,+,A
-test/EMOTE04_1M.fastq.gz,ACAC,A2-,A2,-,A
-test/EMOTE04_1M.fastq.gz,GGTA,A2+,A2,+,A
+test/EMOTE04_1k.fastq.gz,TTGA,A1-,A1,-,A
+test/EMOTE04_1k.fastq.gz,GCTG,A1+,A1,+,A
+test/EMOTE04_1k.fastq.gz,ACAC,A2-,A2,-,A
+test/EMOTE04_1k.fastq.gz,GGTA,A2+,A2,+,A
 ")
 
 # Build the Bowtie index for the Sepi Genome
 bowtie_build("test/Sepi12228.fa","test/Sepi12228.fa.bowtie")
 
 # Run EMOTE demultiplexing on the pooled FASTQ file
-demux.report <- EMOTE_demultiplex_fastq("test/EMOTE04_1M.fastq.gz")
+demux.report <- EMOTE_demultiplex_fastq("test/EMOTE04_1k.fastq.gz")
 
 # Merge resulting demultiplex report with the informations from the sample sheet
 demux.report <- merge(sample.sheet,demux.report,by=c("source","barcode"))
