@@ -117,12 +117,13 @@ EMOTE_parse_reads <- function(
 #' @return a data.frame with demultiplexing statistics
 #' @export
 #' @import ShortRead
+#' @importFrom utils read.table write.table
 EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),force=FALSE,yieldSize=1e6,invalid.reads=TRUE,...) {
   demux.report.file <- file.path(out.dir,"demultiplex_report.txt")
   if (file.exists(demux.report.file) && !force) {
       warning("The output directory already exists => load demultiplexing report from cache. Use force=TRUE to force building the output.\n")
       X <- read.table(demux.report.file,sep="\t",header=TRUE,stringsAsFactors=FALSE)
-      if (!invalid.reads) X <- subset(X,barcode!="INVALID")
+      if (!invalid.reads) X <- X[X$barcode!="INVALID",]
       return(X)
   }
 
@@ -252,6 +253,7 @@ EMOTE_write_quantif <- function(covPos,covNeg,R,file) {
 #' @import GenomicRanges
 #' @import SummarizedExperiment
 #' @import rtracklayer
+#' @importFrom utils unzip
 EMOTE_read_quantif <- function(quantif.files) {
   report.files <- file.path(quantif.files,"report.txt")
   pos.bw.files <- file.path(quantif.files,"positive_strand.bw")
@@ -301,6 +303,7 @@ EMOTE_read_quantif <- function(quantif.files) {
 #' @param mode the quantification mode to use: either all reads, either only ambiguous reads or only unambiguous reads.
 #'   Reads with a mapping quality of 0 are considered ambiguously mapped.
 #' @param yieldSize yieldSize value passed to BamFile to process input file by chunks when limited amount of memory is available
+#' @param force logical, when TRUE erase existing quantification and regenerate a new one with new parameters
 #' @return name of the generated quantification directory
 #' @export
 #' @import GenomicAlignments

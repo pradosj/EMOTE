@@ -8,6 +8,7 @@
 #' @param k.neg number of observed positive event in the backgroud condition
 #' @param n.pos total number of event in the tested condition
 #' @param n.neg total number of event in the backgroud condition
+#' @param p.lb lower bound on the p-value
 #' @return p-value of the enrichment test in pos condition as compared to background condition
 #' @import VGAM
 #' @export
@@ -22,7 +23,6 @@ tss.model <- function(k.pos,k.neg,n.pos,n.neg,p.lb=1e-30) {
 #' Combine P-values of several replicates with Fisher's method
 #'
 #' @param P a matrix of P value with as many column as replicate
-#' @param lb lower bound on the p-value
 #' @return the numeric vector of combined p-values
 #' @export
 p.combine <- function(P) {
