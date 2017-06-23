@@ -117,7 +117,6 @@ EMOTE_parse_reads <- function(
 #' @return a data.frame with demultiplexing statistics
 #' @export
 #' @import ShortRead
-#' @importFrom utils read.table write.table
 EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),force=FALSE,yieldSize=1e6,invalid.reads=TRUE,...) {
   demux.report.file <- file.path(out.dir,"demultiplex_report.txt")
   if (file.exists(demux.report.file) && !force) {
@@ -231,8 +230,7 @@ EMOTE_map <- function(
 }
 
 
-#' Helper function to write an EMOTE quantification file
-#' @import rtracklayer
+# Helper function to write an EMOTE quantification file
 EMOTE_write_quantif <- function(covPos,covNeg,R,file) {
   dir.create(file,showWarnings=FALSE)
   report.file <- file.path(file,"report.txt")
@@ -253,7 +251,6 @@ EMOTE_write_quantif <- function(covPos,covNeg,R,file) {
 #' @import GenomicRanges
 #' @import SummarizedExperiment
 #' @import rtracklayer
-#' @importFrom utils unzip
 EMOTE_read_quantif <- function(quantif.files) {
   report.files <- file.path(quantif.files,"report.txt")
   pos.bw.files <- file.path(quantif.files,"positive_strand.bw")

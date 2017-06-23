@@ -6,6 +6,7 @@ Date: 2016-01-14
 biocViews: Software, Transcriptomics
 Imports:
     utils,
+    stats,
     Biostrings,
     GenomicAlignments,
     GenomicRanges, 

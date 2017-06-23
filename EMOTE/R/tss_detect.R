@@ -25,6 +25,7 @@ tss.model <- function(k.pos,k.neg,n.pos,n.neg,p.lb=1e-30) {
 #' @param P a matrix of P value with as many column as replicate
 #' @return the numeric vector of combined p-values
 #' @export
+#' @importFrom stats pchisq
 p.combine <- function(P) {
   x2 <- -2*rowSums(log(P))
   pchisq(x2,2*ncol(P),lower.tail = FALSE)
