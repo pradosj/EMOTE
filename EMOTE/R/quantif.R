@@ -267,7 +267,7 @@ EMOTE_read_quantif <- function(quantif.files) {
       pos <- which(x>0)
       seq <- Rle(factor(names(pos),names(pos)),elementNROWS(pos))
       n <- unlist(x[x>0],use.names = FALSE)
-      gr <- GRanges(seq,IRanges(unlist(pos),width=1),strand=strand,score=n)
+      gr <- GRanges(seq,IRanges(unlist(pos),width=1),strand=rep(strand,length(n)),score=n)
       seqlengths(gr) <- elementNROWS(x)
       gr
     }
