@@ -327,11 +327,12 @@ EMOTE_quantify <- function(
     open(bf);on.exit(close(bf))
 
     # initialize the report and the coverage variables that will be updated at each iteration
-    covPos <- covNeg <- 0
+    covPos <- covNeg <- NULL
     R <- DataFrame(totalMap=0,totalAmbiguous=0,totalUnambiguous=0,totalDedup=0)
 
     # iterate over all the reads of the BAM file by chunk
-    while(length(gr <- readGAlignments(bf,use.names=TRUE,param=ScanBamParam(what="mapq")))>0) {
+    repeat {
+      gr <- readGAlignments(bf,use.names=TRUE,param=ScanBamParam(what="mapq"))
 
       # update quantif_report statistics with the new chunk
       R$totalMap <- R$totalMap + length(gr)
@@ -355,8 +356,14 @@ EMOTE_quantify <- function(
       R$totalDedup <- R$totalDedup + length(gr)
 
       # update coverage values
-      covPos <- coverage(gr[strand(gr)!="-"]) + covPos
-      covNeg <- coverage(gr[strand(gr)=="-"]) + covNeg
+      if (is.null(covPos)) {
+        covPos <- coverage(gr[strand(gr)!="-"])
+        covNeg <- coverage(gr[strand(gr)=="-"])
+      } else {
+        covPos <- coverage(gr[strand(gr)!="-"]) + covPos
+        covNeg <- coverage(gr[strand(gr)=="-"]) + covNeg
+      }
+      if (length(gr)==0) break;
     }
     EMOTE_write_quantif(covPos,covNeg,R,file=quantif.file)
     return(quantif.file)
