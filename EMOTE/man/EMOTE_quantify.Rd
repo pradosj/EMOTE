@@ -5,8 +5,8 @@
 \title{Quantify number of read starting at each position of the genome}
 \usage{
 EMOTE_quantify(bam.file, quantif.file = paste0(bam.file, ".quantif"),
-  remove.umi.duplicate = TRUE, mode = c("unambiguous", "ambiguous", "all"),
-  yieldSize = NA_integer_, force = FALSE)
+  remove.umi.duplicate = TRUE, mode = c("unambiguous", "ambiguous",
+  "all"), yieldSize = NA_integer_, force = FALSE)
 }
 \arguments{
 \item{bam.file}{the input bam files to process}

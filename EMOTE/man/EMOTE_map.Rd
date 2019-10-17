@@ -4,9 +4,10 @@
 \alias{EMOTE_map}
 \title{Map reads to a genome with Rbowtie}
 \usage{
-EMOTE_map(bowtie_index, fq.file, bam.file = sub("(.fastq|.fq)(.gz)?$", ".bam",
-  fq.file), intermediate.fastq.file = tempfile(fileext = ".fastq"),
-  force = FALSE, threads = 3, yieldSize = 1e+06, ...)
+EMOTE_map(bowtie_index, fq.file, bam.file = sub("(.fastq|.fq)(.gz)?$",
+  ".bam", fq.file), intermediate.fastq.file = tempfile(fileext =
+  ".fastq"), force = FALSE, threads = 3, yieldSize = 1e+06,
+  bowtie_v = 1, ...)
 }
 \arguments{
 \item{bowtie_index}{a length-one character whith the name of the bowtie index
@@ -23,6 +24,8 @@ onto which the reads have to be mapped}
 \item{threads}{number of thread to be used by Rbowtie during the mapping process}
 
 \item{yieldSize}{the number of read processed per iteration when parsing the input FASTQ file to generate the intermediate file}
+
+\item{bowtie_v}{the v parameter to bowtie (no more than V mismatches in the alignment)}
 
 \item{...}{additional paramaters passed to EMOTE_parse_reads()}
 }

@@ -187,6 +187,7 @@ EMOTE_demultiplex_fastq <- function(fq.file,out.dir=paste0(fq.file,".demux"),for
 #' @param force when TRUE the BAM file is generated wven if it already exists
 #' @param threads number of thread to be used by Rbowtie during the mapping process
 #' @param yieldSize the number of read processed per iteration when parsing the input FASTQ file to generate the intermediate file
+#' @param bowtie_v the v parameter to bowtie (no more than V mismatches in the alignment)
 #' @param ... additional paramaters passed to EMOTE_parse_reads()
 #' @return the name of the generated BAM file
 #' @seealso bowtie_build
@@ -197,7 +198,7 @@ EMOTE_map <- function(
   bowtie_index,
   fq.file,bam.file=sub("(.fastq|.fq)(.gz)?$",".bam",fq.file),
   intermediate.fastq.file=tempfile(fileext=".fastq"),
-  force=FALSE,threads=3,yieldSize=1e6,...
+  force=FALSE,threads=3,yieldSize=1e6,bowtie_v=1,...
 ) {
   if (!all(grepl("\\.bam$",bam.file))) stop("bam.file must end with .bam suffix")
   if (!force && file.exists(bam.file)) {
@@ -223,7 +224,7 @@ EMOTE_map <- function(
   #   --best: guarantee that reported alignments are best in number of mismatches
   #     -M 1: report only one random alignment when more than M alignment for the read
   sam.file <- tempfile(fileext=".sam")
-  bowtie(sam=TRUE,best=TRUE,M=1,sequences=intermediate.fastq.file,index=bowtie_index,outfile=sam.file,threads=threads,v=1)
+  bowtie(sam=TRUE,best=TRUE,M=1,sequences=intermediate.fastq.file,index=bowtie_index,outfile=sam.file,threads=threads,v=bowtie_v)
   asBam(sam.file,sub(".bam$","",bam.file),indexDestination=TRUE,overwrite=TRUE)
 
   return(bam.file)

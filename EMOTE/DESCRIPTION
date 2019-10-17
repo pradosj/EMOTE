@@ -25,4 +25,4 @@ Description: EMOTE is a biological protocol for Exact Mapping of Transcripts
     generated with EMOTE protocol.
 License: GPL-3
 LazyData: TRUE
-RoxygenNote: 6.0.1
+RoxygenNote: 6.1.0
